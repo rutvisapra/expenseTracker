@@ -11,10 +11,20 @@ export class AuthService {
 
   constructor(private http: HttpClient) {}
 
+  private isLocalStorageAvailable(): boolean {
+    try {
+      return typeof localStorage !== 'undefined';
+    } catch {
+      return false;
+    }
+  }
+
   register(data: RegisterRequest): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${this.apiUrl}/register`, data).pipe(
       tap(response => {
-        localStorage.setItem('token', response.token);
+        if (this.isLocalStorageAvailable()) {
+          localStorage.setItem('token', response.token);
+        }
       })
     );
   }
@@ -22,17 +32,24 @@ export class AuthService {
   login(data: LoginRequest): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${this.apiUrl}/login`, data).pipe(
       tap(response => {
-        localStorage.setItem('token', response.token);
+        if (this.isLocalStorageAvailable()) {
+          localStorage.setItem('token', response.token);
+        }
       })
     );
   }
 
   logout(): void {
-    localStorage.removeItem('token');
+    if (this.isLocalStorageAvailable()) {
+      localStorage.removeItem('token');
+    }
   }
 
   getToken(): string | null {
-    return localStorage.getItem('token');
+    if (this.isLocalStorageAvailable()) {
+      return localStorage.getItem('token');
+    }
+    return null;
   }
 
   isLoggedIn(): boolean {

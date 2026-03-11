@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, Subject, tap } from 'rxjs';
 import { Expense, CreateExpense } from '../models/expense.model';
 
 @Injectable({
@@ -11,6 +11,9 @@ export class ExpenseService {
 
   constructor(private http: HttpClient) {}
 
+  /** Emits whenever expenses are created/updated/deleted. */
+  readonly changed$ = new Subject<void>();
+
   getAll(): Observable<Expense[]> {
     return this.http.get<Expense[]>(this.apiUrl);
   }
@@ -20,14 +23,20 @@ export class ExpenseService {
   }
 
   create(expense: CreateExpense): Observable<Expense> {
-    return this.http.post<Expense>(this.apiUrl, expense);
+    return this.http.post<Expense>(this.apiUrl, expense).pipe(
+      tap(() => this.changed$.next())
+    );
   }
 
   update(id: number, expense: CreateExpense): Observable<void> {
-    return this.http.put<void>(`${this.apiUrl}/${id}`, expense);
+    return this.http.put<void>(`${this.apiUrl}/${id}`, expense).pipe(
+      tap(() => this.changed$.next())
+    );
   }
 
   delete(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+    return this.http.delete<void>(`${this.apiUrl}/${id}`).pipe(
+      tap(() => this.changed$.next())
+    );
   }
 }
