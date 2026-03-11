@@ -2,17 +2,28 @@
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <span class="navbar-brand">Expense Tracker</span>
-      <div>
-        <button class="btn btn-light me-2" (click)="toggleDarkMode()">
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-light btn-sm" (click)="toggleDarkMode()">
           {{ isDarkMode ? '☀️ Light' : '🌙 Dark' }}
         </button>
-        <a routerLink="/add-expense" class="btn btn-light me-2">Add Expense</a>
-        <button class="btn btn-outline-light" (click)="logout()">Logout</button>
+        <button class="btn btn-info btn-sm" (click)="showGoalsModal = true">🎯 Goals</button>
+        <button class="btn btn-info btn-sm" (click)="showRecurringModal = true">📅 Recurring</button>
+        <button class="btn btn-info btn-sm" (click)="showImportModal = true">📥 Import</button>
+        <button class="btn btn-info btn-sm" (click)="showChangePasswordModal = true">🔐 Password</button>
+        <a routerLink="/add-expense" class="btn btn-light btn-sm">Add Expense</a>
+        <button class="btn btn-outline-light btn-sm" (click)="logout()">Logout</button>
       </div>
     </div>
   </nav>
 
   <div class="container mt-4">
+    <!-- Toast Notification -->
+    <div *ngIf="showNotification" class="alert alert-warning alert-dismissible fade show position-fixed" 
+      style="top: 80px; right: 20px; z-index: 1000; width: 400px;" role="alert">
+      {{ notificationMessage }}
+      <button type="button" class="btn-close" (click)="showNotification = false"></button>
+    </div>
+
     <!-- Budget Alert -->
     <div *ngIf="budgetExceeded" class="alert alert-danger alert-dismissible fade show" role="alert">
       <strong>⚠️ Budget Alert!</strong> You have exceeded your monthly budget of ${{ monthlyBudget }}.
@@ -107,7 +118,91 @@
       </div>
     </div>
 
-    <!-- Expenses Table with Pagination -->
+    <!-- Category Statistics -->
+    <div class="row mt-4">
+      <div class="col-md-6">
+        <div class="card shadow">
+          <div class="card-body">
+            <h5 class="card-title">Category Statistics</h5>
+            <div *ngIf="categoryStats.length > 0" class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Total</th>
+                    <th>Avg</th>
+                    <th>%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let cat of categoryStats">
+                    <td>{{ cat.category }}</td>
+                    <td>${{ cat.total.toFixed(2) }}</td>
+                    <td>${{ cat.average }}</td>
+                    <td>{{ cat.percentage }}%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p *ngIf="categoryStats.length === 0" class="text-muted">No data available</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monthly Spending Summary -->
+      <div class="col-md-6">
+        <div class="card shadow">
+          <div class="card-body">
+            <h5 class="card-title">Monthly Spending Summary</h5>
+            <div *ngIf="monthlySpending.length > 0" class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Total Spending</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let month of monthlySpending">
+                    <td>{{ month.month }}</td>
+                    <td>${{ month.total.toFixed(2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p *ngIf="monthlySpending.length === 0" class="text-muted">No data available</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Last 30 Days Trend -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card shadow">
+          <div class="card-body">
+            <h5 class="card-title">Last 30 Days Spending Trend</h5>
+            <div *ngIf="last30DaysData.length > 0" class="table-responsive">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let day of last30DaysData">
+                    <td>{{ day.day }}</td>
+                    <td>${{ day.total.toFixed(2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p *ngIf="last30DaysData.length === 0" class="text-muted">No data available for last 30 days</p>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="row mt-4">
       <div class="col-12">
         <div class="card shadow">
@@ -157,4 +252,136 @@
       </div>
     </div>
   </div>
+
+  <!-- Change Password Modal -->
+  <div *ngIf="showChangePasswordModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Change Password</h5>
+          <button type="button" class="btn-close" (click)="showChangePasswordModal = false"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Current Password</label>
+            <input type="password" class="form-control" [(ngModel)]="oldPassword">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">New Password</label>
+            <input type="password" class="form-control" [(ngModel)]="newPassword" (input)="validatePasswordStrength(newPassword)">
+            <small class="text-muted">Strength: {{ passwordStrength }}/4</small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Confirm Password</label>
+            <input type="password" class="form-control" [(ngModel)]="confirmNewPassword">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="showChangePasswordModal = false">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="changePassword()">Change Password</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Expenses Modal -->
+  <div *ngIf="showImportModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Import Expenses</h5>
+          <button type="button" class="btn-close" (click)="showImportModal = false"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted">CSV Format: Title, Amount, Category, Date</p>
+          <input type="file" class="form-control" accept=".csv" (change)="onFileSelected($event)">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="showImportModal = false">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="importExpenses()">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expense Goals Modal -->
+  <div *ngIf="showGoalsModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Set Spending Goals</h5>
+          <button type="button" class="btn-close" (click)="showGoalsModal = false"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <select class="form-control" [(ngModel)]="selectedGoalCategory">
+              <option value="">Select Category</option>
+              <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Goal Amount</label>
+            <input type="number" class="form-control" [(ngModel)]="goalAmount" placeholder="Enter goal amount">
+          </div>
+          <div *ngFor="let cat of categories" class="mb-2">
+            <small *ngIf="categoryGoals.has(cat)" class="text-muted">
+              {{ cat }}: ${{ categoryGoals.get(cat) }} ({{ getGoalProgress(cat).toFixed(0) }}% used)
+            </small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="showGoalsModal = false">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="setGoal()">Set Goal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recurring Expenses Modal -->
+  <div *ngIf="showRecurringModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Recurring Expenses</h5>
+          <button type="button" class="btn-close" (click)="showRecurringModal = false"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Title</label>
+            <input type="text" class="form-control" [(ngModel)]="recurringTitle" placeholder="e.g., Netflix">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Amount</label>
+            <input type="number" class="form-control" [(ngModel)]="recurringAmount" placeholder="Enter amount">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <select class="form-control" [(ngModel)]="recurringCategory">
+              <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Frequency</label>
+            <select class="form-control" [(ngModel)]="recurringFrequency">
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <h6>Existing Recurring Expenses:</h6>
+            <div *ngFor="let rec of recurringExpenses; let i = index" class="d-flex justify-content-between align-items-center mb-2">
+              <small>{{ rec.title }} - ${{ rec.amount }} ({{ rec.frequency }})</small>
+              <button class="btn btn-sm btn-danger" (click)="deleteRecurringExpense(i)">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="showRecurringModal = false">Close</button>
+          <button type="button" class="btn btn-primary" (click)="addRecurringExpense()">Add Recurring</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
