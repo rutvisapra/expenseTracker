@@ -1,0 +1,23 @@
+.vs/
+.vscode/
+
+# Node
+**/node_modules/
+**/.angular/cache/
+**/dist/
+**/.vite/
+
+# .NET build output
+**/bin/
+**/obj/
+
+# OS / tooling
+Thumbs.db
+*.user
+*.suo
+*.cache
+*.log
+
+# SQLite transient files
+*.db-shm
+*.db-wal

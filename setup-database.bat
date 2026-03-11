@@ -1,0 +1,9 @@
+@echo off
+echo Setting up Expense Tracker Database...
+cd ExpenseTracker.API
+echo Creating migration...
+dotnet ef migrations add InitialCreate
+echo Updating database...
+dotnet ef database update
+echo Database setup complete!
+pause
