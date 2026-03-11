@@ -68,6 +68,16 @@ export class DashboardComponent implements OnInit {
   }
 
   updateCharts(): void {
+    const buildColors = (count: number): string[] => {
+      // Simple distinct HSL colors for up to a few dozen slices/bars
+      const colors: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const hue = (i * 360) / Math.max(count, 1);
+        colors.push(`hsl(${hue}, 70%, 55%)`);
+      }
+      return colors;
+    };
+
     // Update pie chart with all expenses grouped by category
     const categoryMap = new Map<string, number>();
     this.expenses.forEach(exp => {
@@ -76,9 +86,14 @@ export class DashboardComponent implements OnInit {
     });
 
     if (categoryMap.size > 0) {
+      const labels = Array.from(categoryMap.keys());
+      const values = Array.from(categoryMap.values());
       this.pieChartData = {
-        labels: Array.from(categoryMap.keys()),
-        datasets: [{ data: Array.from(categoryMap.values()) }]
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: buildColors(values.length)
+        }]
       };
       console.log('Pie chart updated:', this.pieChartData);
     } else {
@@ -97,9 +112,15 @@ export class DashboardComponent implements OnInit {
     });
 
     if (dailyMap.size > 0) {
+      const labels = Array.from(dailyMap.keys());
+      const values = Array.from(dailyMap.values());
       this.barChartData = {
-        labels: Array.from(dailyMap.keys()),
-        datasets: [{ data: Array.from(dailyMap.values()), label: 'Daily Expenses' }]
+        labels,
+        datasets: [{
+          data: values,
+          label: 'Daily Expenses',
+          backgroundColor: buildColors(values.length)
+        }]
       };
       console.log('Bar chart updated:', this.barChartData);
     } else {
