@@ -1,8 +1,11 @@
-<div class="container-fluid">
+<div class="container-fluid" [class.dark-mode]="isDarkMode">
   <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
       <span class="navbar-brand">Expense Tracker</span>
       <div>
+        <button class="btn btn-light me-2" (click)="toggleDarkMode()">
+          {{ isDarkMode ? '☀️ Light' : '🌙 Dark' }}
+        </button>
         <a routerLink="/add-expense" class="btn btn-light me-2">Add Expense</a>
         <button class="btn btn-outline-light" (click)="logout()">Logout</button>
       </div>
@@ -10,21 +13,51 @@
   </nav>
 
   <div class="container mt-4">
-    <!-- Debug Information -->
+    <!-- Budget Alert -->
+    <div *ngIf="budgetExceeded" class="alert alert-danger alert-dismissible fade show" role="alert">
+      <strong>⚠️ Budget Alert!</strong> You have exceeded your monthly budget of ${{ monthlyBudget }}.
+      Current spending: ${{ totalExpenses.toFixed(2) }}
+      <button type="button" class="btn-close" (click)="budgetExceeded = false"></button>
+    </div>
+
+    <!-- Search & Filter Section -->
     <div class="row mb-4">
       <div class="col-12">
-        <div class="alert alert-info">
-          <h5>Debug Info:</h5>
-          <p>Total Expenses: {{ totalExpenses }}</p>
-          <p>Number of Expenses: {{ expenses.length }}</p>
-          <p>Current Filter: {{ currentMonth }}/{{ currentYear }}</p>
+        <div class="card shadow">
+          <div class="card-body">
+            <h5 class="card-title">Search & Filter</h5>
+            <div class="row">
+              <div class="col-md-3">
+                <input type="text" class="form-control" placeholder="Search by title" 
+                  [(ngModel)]="searchText" (input)="applyFilters()">
+              </div>
+              <div class="col-md-3">
+                <select class="form-control" [(ngModel)]="selectedCategory" (change)="applyFilters()">
+                  <option value="">All Categories</option>
+                  <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <input type="date" class="form-control" placeholder="Start Date" 
+                  [(ngModel)]="startDate" (change)="applyFilters()">
+              </div>
+              <div class="col-md-2">
+                <input type="date" class="form-control" placeholder="End Date" 
+                  [(ngModel)]="endDate" (change)="applyFilters()">
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-success w-100" (click)="exportToCSV()">📥 Export CSV</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="row">
+    <!-- Summary Cards -->
+    <div class="row mb-4">
       <div class="col-md-4">
-        <div class="card text-center shadow">
+        <div class="card text-center shadow summary-card">
           <div class="card-body">
             <h5 class="card-title">Total Expenses</h5>
             <h2 class="text-primary">${{ totalExpenses.toFixed(2) }}</h2>
@@ -32,29 +65,32 @@
         </div>
       </div>
       <div class="col-md-4">
-        <div class="card text-center shadow">
+        <div class="card text-center shadow summary-card">
           <div class="card-body">
             <h5 class="card-title">Total Transactions</h5>
-            <h2 class="text-success">{{ expenses.length }}</h2>
+            <h2 class="text-success">{{ filteredExpenses.length }}</h2>
           </div>
         </div>
       </div>
       <div class="col-md-4">
-        <div class="card text-center shadow">
+        <div class="card text-center shadow summary-card">
           <div class="card-body">
-            <h5 class="card-title">Current Month</h5>
-            <h2 class="text-info">{{ currentMonth }}/{{ currentYear }}</h2>
+            <h5 class="card-title">Monthly Budget</h5>
+            <h2 class="text-warning">${{ monthlyBudget }}</h2>
+            <button class="btn btn-sm btn-outline-warning mt-2" (click)="setBudget()">Edit Budget</button>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Charts -->
     <div class="row mt-4">
       <div class="col-md-6">
         <div class="card shadow">
           <div class="card-body">
             <h5 class="card-title">Category-wise Expenses</h5>
-            <canvas baseChart [data]="pieChartData" [options]="pieChartOptions" type="pie" *ngIf="pieChartData && pieChartData.labels && pieChartData.labels.length > 0"></canvas>
+            <canvas baseChart [data]="pieChartData" [options]="pieChartOptions" type="pie" 
+              *ngIf="pieChartData && pieChartData.labels && pieChartData.labels.length > 0"></canvas>
             <p *ngIf="!pieChartData || !pieChartData.labels || pieChartData.labels.length === 0">No chart data available</p>
           </div>
         </div>
@@ -63,22 +99,24 @@
         <div class="card shadow">
           <div class="card-body">
             <h5 class="card-title">Daily Expenses</h5>
-            <canvas baseChart [data]="barChartData" [options]="barChartOptions" type="bar" *ngIf="barChartData && barChartData.labels && barChartData.labels.length > 0"></canvas>
+            <canvas baseChart [data]="barChartData" [options]="barChartOptions" type="bar" 
+              *ngIf="barChartData && barChartData.labels && barChartData.labels.length > 0"></canvas>
             <p *ngIf="!barChartData || !barChartData.labels || barChartData.labels.length === 0">No chart data available</p>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Expenses Table with Pagination -->
     <div class="row mt-4">
       <div class="col-12">
         <div class="card shadow">
           <div class="card-body">
-            <h5 class="card-title">All Expenses ({{ expenses.length }} total)</h5>
-            <div *ngIf="expenses.length === 0" class="alert alert-warning">
+            <h5 class="card-title">All Expenses ({{ filteredExpenses.length }} total)</h5>
+            <div *ngIf="filteredExpenses.length === 0" class="alert alert-warning">
               No expenses found. Try adding some expenses!
             </div>
-            <table class="table table-striped" *ngIf="expenses.length > 0">
+            <table class="table table-striped" *ngIf="filteredExpenses.length > 0">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -90,18 +128,30 @@
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let expense of expenses">
+                <tr *ngFor="let expense of paginatedExpenses">
                   <td>{{ expense.id }}</td>
                   <td>{{ expense.title }}</td>
                   <td>${{ expense.amount }}</td>
                   <td><span class="badge bg-info">{{ expense.category }}</span></td>
                   <td>{{ expense.date | date }}</td>
                   <td>
+                    <button class="btn btn-sm btn-warning me-2" (click)="editExpense(expense)">Edit</button>
                     <button class="btn btn-sm btn-danger" (click)="deleteExpense(expense.id)">Delete</button>
                   </td>
                 </tr>
               </tbody>
             </table>
+
+            <!-- Pagination -->
+            <div *ngIf="totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+              <button class="btn btn-sm btn-secondary" (click)="prevPage()" [disabled]="currentPage === 1">
+                ← Previous
+              </button>
+              <span>Page {{ currentPage }} of {{ totalPages }}</span>
+              <button class="btn btn-sm btn-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+                Next →
+              </button>
+            </div>
           </div>
         </div>
       </div>
