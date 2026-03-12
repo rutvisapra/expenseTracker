@@ -7,7 +7,6 @@
           {{ isDarkMode ? '☀️ Light' : '🌙 Dark' }}
         </button>
         <button class="btn btn-info btn-sm" (click)="showGoalsModal = true">🎯 Goals</button>
-        <button class="btn btn-info btn-sm" (click)="showRecurringModal = true">📅 Recurring</button>
         <button class="btn btn-info btn-sm" (click)="showImportModal = true">📥 Import</button>
         <button class="btn btn-info btn-sm" (click)="showChangePasswordModal = true">🔐 Password</button>
         <a routerLink="/add-expense" class="btn btn-light btn-sm">Add Expense</a>
@@ -38,25 +37,32 @@
           <div class="card-body">
             <h5 class="card-title">Search & Filter</h5>
             <div class="row">
-              <div class="col-md-3">
-                <input type="text" class="form-control" placeholder="Search by title" 
-                  [(ngModel)]="searchText" (input)="applyFilters()">
+              <div class="col-md-4">
+                <div style="position: relative;">
+                  <input type="text" class="form-control" placeholder="Search by title" 
+                    [(ngModel)]="searchText" 
+                    (input)="applyFilters()" 
+                    (keydown)="onSearchKeydown($event)"
+                    (blur)="showAutocomplete = false">
+                  
+                  <!-- Autocomplete Dropdown -->
+                  <div *ngIf="showAutocomplete" 
+                    class="autocomplete-dropdown">
+                    <div *ngFor="let suggestion of autocompleteSuggestions" 
+                      (mousedown)="selectSuggestion(suggestion)"
+                      class="autocomplete-item">
+                      {{ suggestion }}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-4">
                 <select class="form-control" [(ngModel)]="selectedCategory" (change)="applyFilters()">
                   <option value="">All Categories</option>
                   <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
                 </select>
               </div>
-              <div class="col-md-2">
-                <input type="date" class="form-control" placeholder="Start Date" 
-                  [(ngModel)]="startDate" (change)="applyFilters()">
-              </div>
-              <div class="col-md-2">
-                <input type="date" class="form-control" placeholder="End Date" 
-                  [(ngModel)]="endDate" (change)="applyFilters()">
-              </div>
-              <div class="col-md-2">
+              <div class="col-md-4">
                 <button class="btn btn-success w-100" (click)="exportToCSV()">📥 Export CSV</button>
               </div>
             </div>
@@ -171,6 +177,39 @@
               </table>
             </div>
             <p *ngIf="monthlySpending.length === 0" class="text-muted">No data available</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Goals Progress -->
+    <div class="row mt-4" *ngIf="categoryGoals.size > 0">
+      <div class="col-12">
+        <div class="card shadow">
+          <div class="card-body">
+            <h5 class="card-title">Category Goals Progress</h5>
+            <div class="row">
+              <div class="col-md-6" *ngFor="let cat of categories">
+                <div *ngIf="categoryGoals.has(cat)" class="mb-3">
+                  <div class="d-flex justify-content-between mb-1">
+                    <span>{{ cat }}</span>
+                    <span class="text-muted">
+                      ${{ getCategorySpending(cat).toFixed(2) }} / ${{ categoryGoals.get(cat) }}
+                    </span>
+                  </div>
+                  <div class="progress" style="height: 20px;">
+                    <div class="progress-bar" 
+                      [class.bg-success]="getGoalProgress(cat) < 80"
+                      [class.bg-warning]="getGoalProgress(cat) >= 80 && getGoalProgress(cat) < 100"
+                      [class.bg-danger]="getGoalProgress(cat) >= 100"
+                      [style.width.%]="Math.min(getGoalProgress(cat), 100)"
+                      role="progressbar">
+                      {{ getGoalProgress(cat).toFixed(0) }}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -293,8 +332,18 @@
           <button type="button" class="btn-close" (click)="showImportModal = false"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted">CSV Format: Title, Amount, Category, Date</p>
+          <div class="alert alert-info">
+            <strong>CSV Format:</strong><br>
+            <small>
+              • With headers: Title, Amount, Category, Date<br>
+              • Example: Coffee, 5.50, Food, 2026-03-13<br>
+              • Or with ID: ID, Title, Amount, Category, Date
+            </small>
+          </div>
           <input type="file" class="form-control" accept=".csv" (change)="onFileSelected($event)">
+          <small class="text-muted mt-2 d-block">
+            Selected: {{ importFile?.name || 'No file selected' }}
+          </small>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" (click)="showImportModal = false">Cancel</button>
@@ -338,50 +387,6 @@
     </div>
   </div>
 
-  <!-- Recurring Expenses Modal -->
-  <div *ngIf="showRecurringModal" class="modal d-block" style="background: rgba(0,0,0,0.5);">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Recurring Expenses</h5>
-          <button type="button" class="btn-close" (click)="showRecurringModal = false"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Title</label>
-            <input type="text" class="form-control" [(ngModel)]="recurringTitle" placeholder="e.g., Netflix">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Amount</label>
-            <input type="number" class="form-control" [(ngModel)]="recurringAmount" placeholder="Enter amount">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Category</label>
-            <select class="form-control" [(ngModel)]="recurringCategory">
-              <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Frequency</label>
-            <select class="form-control" [(ngModel)]="recurringFrequency">
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <h6>Existing Recurring Expenses:</h6>
-            <div *ngFor="let rec of recurringExpenses; let i = index" class="d-flex justify-content-between align-items-center mb-2">
-              <small>{{ rec.title }} - ${{ rec.amount }} ({{ rec.frequency }})</small>
-              <button class="btn btn-sm btn-danger" (click)="deleteRecurringExpense(i)">Delete</button>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="showRecurringModal = false">Close</button>
-          <button type="button" class="btn btn-primary" (click)="addRecurringExpense()">Add Recurring</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
 </div>
+

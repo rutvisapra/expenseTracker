@@ -33,6 +33,10 @@ export class DashboardComponent implements OnInit {
   currentPage = 1;
   pageSize = 10;
   
+  // Autocomplete
+  showAutocomplete = false;
+  autocompleteSuggestions: string[] = [];
+  
   // Dark Mode
   isDarkMode = false;
   
@@ -66,14 +70,6 @@ export class DashboardComponent implements OnInit {
   showGoalsModal = false;
   selectedGoalCategory = '';
   goalAmount = 0;
-  
-  // Recurring Expenses
-  showRecurringModal = false;
-  recurringExpenses: any[] = [];
-  recurringTitle = '';
-  recurringAmount = 0;
-  recurringCategory = 'Food';
-  recurringFrequency = 'monthly'; // monthly, weekly
 
   pieChartData: ChartConfiguration<'pie'>['data'] = {
     labels: [],
@@ -103,7 +99,6 @@ export class DashboardComponent implements OnInit {
     this.loadDarkMode();
     this.loadBudget();
     this.loadGoals();
-    this.loadRecurringExpenses();
   }
 
   loadDarkMode(): void {
@@ -271,39 +266,80 @@ export class DashboardComponent implements OnInit {
     reader.onload = (e: any) => {
       const csv = e.target.result;
       const lines = csv.split('\n');
-      let importedCount = 0;
+      const expenses: any[] = [];
 
+      // Parse CSV - expecting format: Title, Amount, Category, Date
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
         
-        const [, title, amount, category, date] = lines[i].split(',');
+        const columns = lines[i].split(',');
+        
+        // Handle both formats: with ID or without ID
+        let title, amount, category, date;
+        
+        if (columns.length === 5) {
+          // Format: ID, Title, Amount, Category, Date
+          [, title, amount, category, date] = columns;
+        } else if (columns.length === 4) {
+          // Format: Title, Amount, Category, Date
+          [title, amount, category, date] = columns;
+        } else {
+          console.warn(`Skipping invalid row ${i}: ${lines[i]}`);
+          continue;
+        }
         
         if (!title || !amount || !category || !date) {
-          console.warn(`Skipping invalid row: ${i}`);
+          console.warn(`Skipping incomplete row ${i}`);
           continue;
         }
 
-        const expense = {
+        expenses.push({
           title: title.trim(),
-          amount: Number(amount),
+          amount: Number(amount.trim()),
           category: category.trim(),
           date: new Date(date.trim())
-        };
-
-        this.expenseService.create(expense).subscribe({
-          next: () => importedCount++,
-          error: (err) => console.error('Error importing expense:', err)
         });
       }
 
-      setTimeout(() => {
-        alert(`Imported ${importedCount} expenses successfully!`);
-        this.showImportModal = false;
-        this.importFile = null;
-        this.loadExpenses();
-      }, 1000);
+      if (expenses.length === 0) {
+        alert('No valid expenses found in CSV file');
+        return;
+      }
+
+      // Import all expenses
+      let importedCount = 0;
+      let errorCount = 0;
+
+      expenses.forEach((expense, index) => {
+        this.expenseService.create(expense).subscribe({
+          next: () => {
+            importedCount++;
+            if (importedCount + errorCount === expenses.length) {
+              this.finishImport(importedCount, errorCount);
+            }
+          },
+          error: (err) => {
+            console.error('Error importing expense:', err);
+            errorCount++;
+            if (importedCount + errorCount === expenses.length) {
+              this.finishImport(importedCount, errorCount);
+            }
+          }
+        });
+      });
     };
     reader.readAsText(this.importFile);
+  }
+  
+  finishImport(successCount: number, errorCount: number): void {
+    if (errorCount > 0) {
+      alert(`Imported ${successCount} expenses successfully! ${errorCount} failed.`);
+    } else {
+      alert(`Imported ${successCount} expenses successfully!`);
+    }
+    this.showImportModal = false;
+    this.importFile = null;
+    this.loadExpenses();
   }
 
   // Expense Goals Methods
@@ -331,47 +367,14 @@ export class DashboardComponent implements OnInit {
     const goal = this.categoryGoals.get(category);
     if (!goal) return 0;
     
-    const spent = this.categoryStats.find(c => c.category === category)?.total || 0;
+    const spent = this.getCategorySpending(category);
     return (spent / goal) * 100;
   }
-
-  // Recurring Expenses Methods
-  addRecurringExpense(): void {
-    if (!this.recurringTitle || this.recurringAmount <= 0) {
-      alert('Please enter valid title and amount');
-      return;
-    }
-
-    const recurring = {
-      title: this.recurringTitle,
-      amount: this.recurringAmount,
-      category: this.recurringCategory,
-      frequency: this.recurringFrequency,
-      createdDate: new Date()
-    };
-
-    this.recurringExpenses.push(recurring);
-    localStorage.setItem('recurringExpenses', JSON.stringify(this.recurringExpenses));
-    alert('Recurring expense added!');
-    this.showRecurringModal = false;
-    this.recurringTitle = '';
-    this.recurringAmount = 0;
-    this.recurringCategory = 'Food';
-    this.recurringFrequency = 'monthly';
-  }
-
-  loadRecurringExpenses(): void {
-    const saved = localStorage.getItem('recurringExpenses');
-    if (saved) {
-      this.recurringExpenses = JSON.parse(saved);
-    }
-  }
-
-  deleteRecurringExpense(index: number): void {
-    if (confirm('Delete this recurring expense?')) {
-      this.recurringExpenses.splice(index, 1);
-      localStorage.setItem('recurringExpenses', JSON.stringify(this.recurringExpenses));
-    }
+  
+  getCategorySpending(category: string): number {
+    return this.expenses
+      .filter(exp => exp.category === category)
+      .reduce((sum, exp) => sum + exp.amount, 0);
   }
 
   toggleDarkMode(): void {
@@ -390,9 +393,22 @@ export class DashboardComponent implements OnInit {
 
   applyFilters(): void {
     this.currentPage = 1;
+    
+    // Update autocomplete suggestions
+    if (this.searchText.length > 0) {
+      const uniqueTitles = [...new Set(this.expenses.map(exp => exp.title))];
+      this.autocompleteSuggestions = uniqueTitles.filter(title => 
+        title.toLowerCase().includes(this.searchText.toLowerCase())
+      ).slice(0, 5); // Show max 5 suggestions
+      this.showAutocomplete = this.autocompleteSuggestions.length > 0;
+    } else {
+      this.showAutocomplete = false;
+      this.autocompleteSuggestions = [];
+    }
+    
     this.filteredExpenses = this.expenses.filter(exp => {
-      const matchesSearch = exp.title.toLowerCase().includes(this.searchText.toLowerCase());
-      const matchesCategory = !this.selectedCategory || exp.category === this.selectedCategory;
+      const matchesSearch = this.searchText.length === 0 || exp.title.toLowerCase().includes(this.searchText.toLowerCase());
+      const matchesCategory = this.selectedCategory === '' || exp.category === this.selectedCategory;
       
       let matchesDateRange = true;
       if (this.startDate || this.endDate) {
@@ -406,7 +422,34 @@ export class DashboardComponent implements OnInit {
       }
       
       return matchesSearch && matchesCategory && matchesDateRange;
-    });
+    }).sort((a, b) => a.id - b.id); // Keep sorted by ID after filtering
+    
+    this.cdr.detectChanges();
+  }
+  
+  selectSuggestion(title: string): void {
+    this.searchText = title;
+    this.showAutocomplete = false;
+    this.applyFilters();
+    this.scrollToTable();
+  }
+  
+  onSearchKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && this.searchText.length >= 3) {
+      this.showAutocomplete = false;
+      this.scrollToTable();
+    }
+  }
+  
+  scrollToTable(): void {
+    if (this.filteredExpenses.length > 0) {
+      setTimeout(() => {
+        const tableElement = document.querySelector('.table');
+        if (tableElement) {
+          tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
   }
 
   get paginatedExpenses(): Expense[] {
@@ -458,11 +501,14 @@ export class DashboardComponent implements OnInit {
     this.expenseService.getAll().subscribe({
       next: (data) => {
         console.log('Loaded expenses:', data);
-        this.expenses = data;
-        this.filteredExpenses = data;
+        // Sort expenses by ID in ascending order (1, 2, 3, ...)
+        this.expenses = data.sort((a, b) => a.id - b.id);
         this.totalExpenses = data.reduce((sum, exp) => sum + exp.amount, 0);
         console.log('Total expenses calculated:', this.totalExpenses);
         console.log('Number of expenses:', data.length);
+        
+        // Apply filters to populate filteredExpenses
+        this.applyFilters();
         
         // Update charts with all expenses
         this.updateCharts();
